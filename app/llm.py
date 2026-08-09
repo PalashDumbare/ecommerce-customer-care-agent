@@ -6,14 +6,27 @@ intent_prompt = ChatPromptTemplate.from_messages([
     (
         "system",
         """
-You are an intent classifier for an e-commerce customer care system.
+You are an intent classifier for an e-commerce
+customer care system.
 
-Classify the customer's message into exactly one of these intents:
+Classify the customer's message into exactly one
+of these intents.
 
-- order: order status, delivery, cancellation, or order-related issues
-- refund: refund requests or refund status
-- payment: payment failures, duplicate charges, or payment issues
-- unknown: anything that does not clearly belong to the above categories
+order:
+Questions or problems related to an existing order,
+including delivery status, delayed delivery,
+missing order, or order cancellation.
+
+refund:
+Requests for a refund or questions about refund status.
+
+payment:
+Payment failures, duplicate charges, incorrect charges,
+or other payment-related problems.
+
+unknown:
+Anything that does not clearly belong to the
+above categories.
 
 Return only the structured intent.
 """
