@@ -1,17 +1,32 @@
 
 from .state import CustomerCareState
 from app.llm import intent_model
+from app.tools import get_order_status   
 
 def understand_request(state: CustomerCareState):
     result = intent_model.invoke(state["message"])
+    print(f"Response from the LLM : {result}")
     return {
         "intent": result["intent"]
     }
 
 
 def handle_order(state: CustomerCareState):
+    result = get_order_status(
+        state["order_id"],
+        state["user_id"]
+    )
+    if not result["found"]:
+        return {
+            "response" : "Could'nt found the order"
+        }
+    order = result["order"]
     return {
-        "response": "Sure! I can help you with your order."
+        "response" : (
+            f"Your Order {order['order_id']} is "
+            f"{order['status'].replace('-',' ')}. "
+            f"Estimated delivery : {order['estimated_delivery']}"
+        )
     }
 
 def handle_refund(state: CustomerCareState):
