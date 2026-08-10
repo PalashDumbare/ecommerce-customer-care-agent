@@ -8,13 +8,13 @@ Intent = Literal[
     "unknown",
 ]
 
-
 # state of the entire LangGraph
 class CustomerCareState(TypedDict):
     user_id: str
     message: str
     intent: Intent
     response: str
+    order_id : str
 
 # output we expect from the LLM
 class IntentOutput(TypedDict):
