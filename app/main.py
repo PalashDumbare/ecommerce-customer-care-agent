@@ -15,12 +15,18 @@ def main():
 
     result = graph.invoke(
         {
-    "user_id": "U1001",
-    "message": "where is my order?",
-    "intent": "",
-    "response": "",
-    "order_id": "ORD1003",
-}
+            "user_id": "U1002",
+             "order_id": "ORD1003",
+            "message": "I need help",
+            "intent": "",
+            "response": "",
+            "messages": [
+            {
+                "role": "user",
+                "content": "I need help"
+            }
+    ],
+    }
     )
 
     print(f"\nUser: {result}")

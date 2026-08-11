@@ -1,5 +1,5 @@
 from typing import Dict
-
+from langchain_core.tools import tool
 
 ORDERS: Dict[str, dict] = {
     "ORD1001": {
@@ -22,7 +22,16 @@ ORDERS: Dict[str, dict] = {
     },
 }
 
+@tool(
+    description= """
+        Get the status of an e-commerce order for a user.
+    
+        Use this when the customer asks about their order status,
+        delivery status, or whether an order has been delivered.
+        """
+)
 def get_order_status(order_id, user_id):
+
     order = ORDERS.get(order_id)
 
     if order is None:

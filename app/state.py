@@ -1,5 +1,7 @@
 from typing_extensions import TypedDict
-from typing import Literal
+from typing import Literal,Annotated
+from langgraph.graph.message import add_messages
+
 
 Intent = Literal[
     "order",
@@ -15,6 +17,7 @@ class CustomerCareState(TypedDict):
     intent: Intent
     response: str
     order_id : str
+    messages : Annotated[list, add_messages]
 
 # output we expect from the LLM
 class IntentOutput(TypedDict):
