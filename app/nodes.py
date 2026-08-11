@@ -2,6 +2,8 @@
 from .state import CustomerCareState
 from app.llm import intent_model
 from app.tools import get_order_status   
+from app.llm import model_with_tools
+
 
 def understand_request(state: CustomerCareState):
     result = intent_model.invoke(state["message"])
@@ -11,23 +13,35 @@ def understand_request(state: CustomerCareState):
     }
 
 
-def handle_order(state: CustomerCareState):
-    result = get_order_status(
-        state["order_id"],
-        state["user_id"]
-    )
-    if not result["found"]:
-        return {
-            "response" : "Could'nt found the order"
-        }
-    order = result["order"]
-    return {
-        "response" : (
-            f"Your Order {order['order_id']} is "
-            f"{order['status'].replace('-',' ')}. "
-            f"Estimated delivery : {order['estimated_delivery']}"
-        )
+def agent(state : CustomerCareState):
+    print("In the agent")
+
+    system_message = {
+        "role": "system",
+        "content": (
+            "You are an e-commerce customer care agent. "
+            "Help the customer with their request. "
+            f"The authenticated user ID is {state['user_id']}. "
+            f"The relevant order ID is {state['order_id']}."
+        ),
     }
+
+    messages = [
+        system_message,
+        *state["messages"],
+    ]
+
+    print(f"PROMPT TO THE AGENT {messages}")
+    response = model_with_tools.invoke(messages)
+
+    update = {
+        "messages" : [response]
+    }
+
+    if not response.tool_calls:
+        update["response"] = response.content
+
+    return update
 
 def handle_refund(state: CustomerCareState):
     return {

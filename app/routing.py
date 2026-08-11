@@ -11,3 +11,10 @@ def routing(state: CustomerCareState):
         # "order"
    intent = state["intent"]
    return intent if intent in {"order", "refund", "payment", "unknown"} else "unknown"
+
+
+def route_agent(state : CustomerCareState):
+   last_message = state['messages'][-1]
+   if last_message.tool_calls:
+      return "tools"
+   return "end"
