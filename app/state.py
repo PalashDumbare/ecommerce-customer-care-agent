@@ -1,5 +1,5 @@
 from typing_extensions import TypedDict
-from typing import Literal,Annotated
+from typing import Literal,Annotated,Optional
 from langgraph.graph.message import add_messages
 
 
@@ -13,10 +13,10 @@ Intent = Literal[
 # state of the entire LangGraph
 class CustomerCareState(TypedDict):
     user_id: str
-    message: str
     intent: Intent
     response: str
-    order_id : str
+    order_id : Optional[str]
+    awaiting_order_id: bool
     messages : Annotated[list, add_messages]
 
 # output we expect from the LLM

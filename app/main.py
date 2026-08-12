@@ -1,38 +1,42 @@
-from .graph import graph
-from .tools.order import get_order_status
+from app.graph import graph
+
 
 def main():
-    # messages = [
-    #     "Where is my order?",
-    #     "My delivery hasn't arrived yet",
-    #     "I want my money back",
-    #     "Where is my refund?",
-    #     "You charged me twice",
-    #     "My payment failed",
-    #     "What is the weather today?",
-    # ]
 
-
-    result = graph.invoke(
-        {
-            "user_id": "U1002",
-             "order_id": "ORD1003",
-            "message": "I need help",
-            "intent": "",
-            "response": "",
-            "messages": [
-            {
-                "role": "user",
-                "content": "I need help"
-            }
-    ],
+    config = {
+        "configurable": {
+            "thread_id": "conversation-1001"
+        }
     }
-    )
 
-    print(f"\nUser: {result}")
-    print(f"Intent: {result['intent']}")
-    print(f"Response: {result['response']}")
+    print("Customer Care Agent")
+    print("Type 'quit' to exit.\n")
+
+    while True:
+
+        message = input("You: ")
+
+        if message.lower() == "quit":
+            print("Goodbye!")
+            break
+
+        prompt =  {
+                "user_id": "U1002",
+                "message": message,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": message
+                    }
+                ],
+            }
+        result = graph.invoke(
+            prompt,
+            config=config,
+        )
+
+        print(f"Agent: {result['response']}\n")
+
 
 if __name__ == "__main__":
     main()
-
