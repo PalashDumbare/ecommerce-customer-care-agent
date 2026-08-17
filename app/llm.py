@@ -2,6 +2,7 @@ from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
 from app.state import IntentOutput
 from app.tools import get_order_status
+from app.tools import request_refund
 
 intent_prompt = ChatPromptTemplate.from_messages([
     (
@@ -45,7 +46,8 @@ model = ChatOllama(
 
 model_with_tools = model.bind_tools(
     [
-        get_order_status
+        get_order_status,
+        request_refund
     ]
 )
 
