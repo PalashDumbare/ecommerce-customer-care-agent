@@ -5,7 +5,7 @@ def main():
 
     config = {
         "configurable": {
-            "thread_id": "conversation-1001"
+            "thread_id": "conversation-1005"
         }
     }
 
@@ -15,6 +15,9 @@ def main():
     while True:
 
         message = input("You: ")
+
+        if not message:
+            continue
 
         if message.lower() == "quit":
             print("Goodbye!")

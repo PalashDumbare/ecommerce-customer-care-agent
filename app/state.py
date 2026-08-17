@@ -17,6 +17,7 @@ class CustomerCareState(TypedDict):
     response: str
     order_id : Optional[str]
     awaiting_order_id: bool
+    pending_confirmation: bool
     messages : Annotated[list, add_messages]
 
 # output we expect from the LLM
