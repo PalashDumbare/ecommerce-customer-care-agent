@@ -1,15 +1,19 @@
+import json
+import logging
+import re
+
+from langchain_core.messages import ToolMessage
+
+from app.llm import intent_model
+from app.llm import model_with_tools
+from app.tools.refund import submit_refund
 
 from .state import CustomerCareState
-from app.llm import intent_model
-from app.tools import get_order_status   
-from app.llm import model_with_tools
-from app.utils import print_latest_state
-import re
-from langchain_core.messages import ToolMessage
-from app.tools.refund import submit_refund
-import json
 
-def agent(state : CustomerCareState):
+logger = logging.getLogger(__name__)
+
+
+def agent(state: CustomerCareState):
     if (
         state.get("order_id") is None
         and state.get("intent") in {"order", "refund"}
@@ -18,6 +22,7 @@ def agent(state : CustomerCareState):
             "response": "Please provide your order ID.",
             "awaiting_order_id": True,
         }
+
     system_message = {
         "role": "system",
         "content": (
@@ -28,8 +33,11 @@ def agent(state : CustomerCareState):
             "You have two tools available: get_order_status for checking "
             "an order's delivery status, and request_refund for handling "
             "refund requests or questions about refund status. "
-            "For refund requests, always use the order ID and user ID "
-            "provided above when calling the request_refund tool."
+            "Call a tool with the order ID only; the authenticated user "
+            "is enforced automatically by the system. "
+            "If a tool reports that an order was not found or that an "
+            "operation failed, tell the customer helpfully. Never guess "
+            "or invent order details."
         ),
     }
 
@@ -37,31 +45,48 @@ def agent(state : CustomerCareState):
         system_message,
         *state.get("messages", []),
     ]
-    response = model_with_tools.invoke(messages)
-    print_latest_state(state)
+
+    try:
+        response = model_with_tools.invoke(messages)
+    except Exception:
+        logger.error("Agent LLM call failed", exc_info=True)
+        return {
+            "response": "I'm having trouble right now. Please try again in a moment.",
+            "awaiting_order_id": state.get("awaiting_order_id", False),
+        }
+
     update = {
-        "messages" : [response]
+        "messages": [response],
     }
 
     # 1. LLM wants to call a tool
     if response.tool_calls:
         return update
 
-    # 2. Check the previous message for a refund tool result
-    last_message = state["messages"][-1]
+    # 2. A completed request_refund with an eligible, not-yet-requested
+    #    order moves the conversation into the confirmation workflow.
+    messages_so_far = state.get("messages", [])
+    last_message = messages_so_far[-1] if messages_so_far else None
     if (
         isinstance(last_message, ToolMessage)
         and last_message.name == "request_refund"
     ):
-        result = json.loads(last_message.content)
-
-        if result.get("found") and result.get("eligible"):
+        try:
+            result = json.loads(last_message.content)
+        except (TypeError, ValueError):
+            logger.warning("Unparseable tool message: %r", last_message.content)
+            result = {}
+        if (
+            result.get("found")
+            and result.get("eligible")
+            and result.get("status") == "not_requested"
+        ):
             update["pending_confirmation"] = True
 
-    # 3. LLM needs the order ID
+    # 3. LLM still needs the order ID
     if state.get("order_id") is None and state.get("intent") in {"order", "refund"}:
-        update['response'] = response.content or ''
-        update['awaiting_order_id'] = True
+        update["response"] = response.content or ""
+        update["awaiting_order_id"] = True
         return update
 
     # 4. Normal final response
@@ -70,8 +95,16 @@ def agent(state : CustomerCareState):
 
     return update
 
+
 def extract_order_id(state: CustomerCareState):
-    message = state.get("messages", [])[-1].content
+    messages = state.get("messages", [])
+    if not messages:
+        return {
+            "response": "Please provide a valid order ID, such as ORD1001.",
+            "awaiting_order_id": True,
+        }
+
+    message = str(messages[-1].content or "")
 
     match = re.search(
         r"\bORD\d+\b",
@@ -91,13 +124,21 @@ def extract_order_id(state: CustomerCareState):
         "awaiting_order_id": False,
     }
 
+
 def understand_request(state: CustomerCareState):
-    message = state.get("messages", [])[-1].content
+    messages = state.get("messages", [])
+    if not messages:
+        return {
+            "intent": "unknown",
+            "awaiting_order_id": False,
+        }
+
+    message = str(messages[-1].content or "")
 
     result = intent_model.invoke(message)
     return {
         "intent": result["intent"],
-        "awaiting_order_id" : False
+        "awaiting_order_id": False,
     }
 
 
@@ -106,20 +147,27 @@ def handle_payment(state: CustomerCareState):
         "response": "I can help you with your payment-related concerns."
     }
 
+
 def handle_unknown(state: CustomerCareState):
     return {
         "response": "Could you provide more details about your issue?"
     }
 
 
-
 def handle_confirmation(state: CustomerCareState):
+    # Confirmation safety: only a valid, pending confirmation may submit.
+    # This node (not the LLM) deterministically executes the write.
+    if not state.get("pending_confirmation", False):
+        return {
+            "response": "Refund requests must be confirmed before submission.",
+            "pending_confirmation": False,
+        }
 
-    result = submit_refund.invoke({
-        "order_id": state["order_id"],
-        "user_id": state["user_id"],
-    })
-     
+    result = submit_refund.invoke(
+        {"order_id": state.get("order_id")},
+        config={"configurable": {"user_id": state.get("user_id")}},
+    )
+
     if not result["success"]:
         return {
             "response": result["message"],
@@ -128,15 +176,14 @@ def handle_confirmation(state: CustomerCareState):
 
     return {
         "response": (
-            f"Your refund request for order "
-            f"{state['order_id']} has been submitted successfully."
+            f"Your refund request for order {state['order_id']} "
+            "has been submitted successfully."
         ),
         "pending_confirmation": False,
     }
 
 
 def handle_confirmation_cancel(state: CustomerCareState):
-
     return {
         "response": "No problem. I won't proceed with the refund.",
         "pending_confirmation": False,
@@ -144,9 +191,11 @@ def handle_confirmation_cancel(state: CustomerCareState):
 
 
 def handle_confirmation_unknown(state: CustomerCareState):
-
     return {
-        "response": "Please confirm whether you want to proceed with the refund by replying yes or no.",
+        "response": (
+            "Please confirm whether you want to proceed with the "
+            "refund by replying yes or no."
+        ),
         "pending_confirmation": True,
     }
 

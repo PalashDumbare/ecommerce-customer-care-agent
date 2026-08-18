@@ -44,6 +44,9 @@ model = ChatOllama(
     temperature=0 # no creative variation.
 )
 
+# The agent model may only see the read / request tools. submit_refund is
+# intentionally excluded: refund submission is a deterministic graph action
+# gated by human confirmation, never an LLM decision.
 model_with_tools = model.bind_tools(
     [
         get_order_status,
