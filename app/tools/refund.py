@@ -1,4 +1,8 @@
 from langchain_core.tools import tool
+from langchain_core.runnables import RunnableConfig
+
+from app.tools.order import ORDERS
+from .common import validate_order_id, validate_user_id, unexpected_error
 
 REFUNDS = {
     "ORD1001": {
@@ -13,33 +17,52 @@ REFUNDS = {
         "eligible": True,
         "status": "not_requested",
     },
+    "ORD1004": {
+        "eligible": False,
+        "status": "not_eligible",
+    },
 }
 
 
 @tool(
-    description= """
-        Request a refund for an order, or check the status
-        of a refund for a user.
-    as
+    description="""
+        Request a refund for the authenticated user's order,
+        or check the status of a refund for the authenticated user.
+
         Use this when the customer asks for a refund or
         asks about the status of an existing refund.
+
+        Validation and authorization are enforced automatically.
         """
 )
-def request_refund(order_id: str, user_id: str):
+def request_refund(order_id: str, config: RunnableConfig) -> dict:
 
-    refund = REFUNDS.get(order_id)
+    order_id, err = validate_order_id(order_id)
+    if err:
+        return {"found": False, **err}
 
-    if not refund:
+    user_id, err = validate_user_id((config or {}).get("configurable", {}).get("user_id"))
+    if err:
+        return {"found": False, **err}
+
+    try:
+        order = ORDERS.get(order_id)
+        refund = REFUNDS.get(order_id)
+    except Exception:
+        return {"found": False, **unexpected_error("request_refund")}
+
+    if order is None or order["user_id"] != user_id:
         return {
             "found": False,
-            "message": "Order not found."
+            "status": "not_found",
+            "message": "Order not found.",
         }
 
-    if refund["status"] == "already_refunded":
+    if refund is None:
         return {
-            "found": True,
-            "eligible": False,
-            "status": "already_refunded"
+            "found": False,
+            "status": "not_found",
+            "message": "Order not found.",
         }
 
     return {
@@ -50,33 +73,66 @@ def request_refund(order_id: str, user_id: str):
 
 
 @tool
-def submit_refund(order_id: str, user_id: str):
-    """Submit a refund request for an eligible order."""
+def submit_refund(order_id: str, config: RunnableConfig) -> dict:
+    """Submit a refund request for an eligible order.
 
-    refund = REFUNDS.get(order_id)
+    Idempotent: repeated calls for the same order return
+    already_requested instead of creating a duplicate request.
+    """
 
-    if not refund:
+    order_id, err = validate_order_id(order_id)
+    if err:
+        return {"success": False, **err}
+
+    user_id, err = validate_user_id((config or {}).get("configurable", {}).get("user_id"))
+    if err:
+        return {"success": False, **err}
+
+    try:
+        order = ORDERS.get(order_id)
+        refund = REFUNDS.get(order_id)
+    except Exception:
+        return {"success": False, **unexpected_error("submit_refund")}
+
+    if order is None or order["user_id"] != user_id:
         return {
             "success": False,
-            "message": "Order not found."
+            "status": "not_found",
+            "message": "Order not found.",
+        }
+
+    if refund is None:
+        return {
+            "success": False,
+            "status": "not_found",
+            "message": "Order not found.",
         }
 
     if not refund["eligible"]:
         return {
             "success": False,
-            "message": "Order is not eligible for a refund."
+            "status": "not_eligible",
+            "message": "Order is not eligible for a refund.",
         }
 
     if refund["status"] == "already_refunded":
         return {
             "success": False,
-            "message": "Refund has already been processed."
+            "status": "already_refunded",
+            "message": "Refund has already been processed.",
+        }
+
+    if refund["status"] == "requested":
+        return {
+            "success": False,
+            "status": "already_requested",
+            "message": "Refund has already been requested.",
         }
 
     refund["status"] = "requested"
 
     return {
         "success": True,
+        "status": "requested",
         "order_id": order_id,
-        "status": "requested"
     }

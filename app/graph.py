@@ -1,5 +1,13 @@
 """Customer care LangGraph definition.
 
+Responsibility separation (Phase 6):
+    LLM    - understand intent, decide which read/tool operation is relevant,
+             generate natural-language responses
+    Graph  - manage workflow/state, multi-turn transitions, the confirmation
+             workflow, and routing
+    Tools  - validate inputs, authorize access, enforce business rules,
+             perform reads/writes, and return structured results
+
 Graph layout:
     START
       └─ entry_router ──┬─ understand_request ── routing ──┬─ agent (order/refund)
@@ -35,8 +43,10 @@ from .nodes import (
 from .routing import routing, route_agent, entry_router, confirmation_router
 
 
-# --- Tool node: lets the agent call the tools ---
-tool_node = ToolNode([get_order_status,request_refund])
+# --- Tool node: lets the agent call the read/request tools only.
+# submit_refund is deliberately NOT bound to the model: the refund write may
+# only happen through the deterministic confirmation node. ---
+tool_node = ToolNode([get_order_status, request_refund])
 
 # --- Build the graph ---
 builder = StateGraph(CustomerCareState)
